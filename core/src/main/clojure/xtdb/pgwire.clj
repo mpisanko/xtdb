@@ -1140,6 +1140,7 @@
                (let [row (mapv
                           (fn [{:keys [field-name write-binary write-text result-format]}]
                             (let [rdr (.readerForName ^RelationReader rel field-name)]
+                              (log/tracef "writing %s for rel %s field-name %s" result-format rel field-name)
                               (when-not (.isNull rdr idx)
                                 (if (= :binary result-format)
                                   (write-binary session rdr idx)
