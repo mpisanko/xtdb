@@ -17,8 +17,7 @@
             [xtdb.util :as util])
   (:import (java.io InputStream)
            (java.lang Thread$State)
-           [java.net Socket]
-           (java.sql Connection PreparedStatement ResultSet SQLWarning Statement Timestamp Types)
+           (java.sql Array Connection PreparedStatement ResultSet SQLWarning Statement Timestamp Types)
            (java.time Clock Instant LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset)
            java.util.Calendar
            (java.util.concurrent CountDownLatch TimeUnit)
@@ -104,8 +103,10 @@
     (-> (loop [res []]
           (if (.next rs)
             (recur (->>
-                    (for [idx (range 1 (inc (.getColumnCount md)))]
-                      {(.getColumnName md idx) (.getObject rs ^long idx)})
+                    (for [idx (range 1 (inc (.getColumnCount md)))
+                          :let [obj (.getObject rs idx)]]
+                      {(.getColumnName md idx) (cond-> obj
+                                                 (instance? Array obj) (-> .getArray vec))})
                     (into {})
                     (conj res)))
             res))
@@ -1985,11 +1986,10 @@ ORDER BY t.oid DESC LIMIT 1"
       (jdbc/execute! conn ["INSERT INTO docs(_id) VALUES (1)"])
       (jdbc/execute! conn ["INSERT INTO docs(_id) VALUES (2)"])
 
-      (with-open [stmt (.prepareStatement conn "SELECT ARRAY(SELECT _id FROM docs) AS ids")]
-
+      (with-open [stmt (.prepareStatement conn "SELECT ARRAY(SELECT _id FROM docs ORDER BY _id) AS ids")]
         (with-open [rs (.executeQuery stmt)]
-          (t/is (= [{"ids" "_int4"}]
+          (t/is (= [{"ids" "_int8"}]
                    (result-metadata stmt)
                    (result-metadata rs)))
 
-          #_(t/is (= [{"ids" [1 2]}] (rs->maps rs))))))))
+          (t/is (= [{"ids" [1 2]}] (rs->maps rs))))))))

@@ -11,7 +11,8 @@
             [xtdb.vector.reader :as vr]
             [xtdb.compactor :as c]
             [xtdb.time :as time]
-            [xtdb.pgwire :as pgw])
+            [xtdb.pgwire :as pgw]
+            [user :refer [set-log-level!]])
   (:import [java.nio.file Path]
            java.time.Duration
            [org.apache.arrow.memory RootAllocator]
@@ -45,7 +46,10 @@
   (do
     (halt)
     (util/delete-dir (util/->path dev-node-dir))
+    (set-log-level! 'xtdb.types :trace)
+    (set-log-level! 'xtdb.pgwire :info)
     (go)))
+
 
 (def playground-config
   {::playground {:port 5439}})

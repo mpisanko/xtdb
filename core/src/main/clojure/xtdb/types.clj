@@ -302,17 +302,8 @@
 (def date-time-types (descendants col-type-hierarchy :date-time))
 
 (defn flatten-union-types [col-type]
-  ;; FIXME this starts to smell (after my addition).
-  ;; just trying to get it to work, will need to revisit
-  (cond
-    (and
-     (= :list (col-type-head col-type))
-     (= :union (col-type-head (second col-type)))
-     (= 1 (count (rest (second col-type)))))
-    [:list (second (second col-type))]
-    (= :union (col-type-head col-type))
+  (if (= :union (col-type-head col-type))
     (second col-type)
-    :else
     #{col-type}))
 
 (defn flatten-union-field [^Field field]
@@ -1219,15 +1210,14 @@
            :write-text (fn [_env ^IVectorReader list-rdr idx]
                          (let [^IVectorReader el-rdr (.listElementReader list-rdr)
                                sb (StringBuilder. "{")]
-                           (log/tracef "write-text_int4 start %d len %d"
-                                      (.getListStartIndex list-rdr idx)
-                                      (.getListCount list-rdr idx))
                            (if (not (zero? (.getListCount list-rdr idx)))
                              (do
                                (loop [lidx (.getListStartIndex list-rdr idx)]
                                  (when (< lidx (+ (.getListCount list-rdr idx)
                                                   (.getListStartIndex list-rdr idx)))
-                                   (.append sb (.getInt el-rdr lidx))
+                                   (.append sb (if (.isNull el-rdr lidx)
+                                                  "null"
+                                                  (.getInt el-rdr lidx)))
                                    (.append sb ",")
                                    (recur (inc lidx))))
                                (.setCharAt sb (dec (.length sb)) \}))
@@ -1248,18 +1238,17 @@
                                             (str/split #","))))]
                           (mapv #(Long/parseLong %) elems)))
                       ;; :read-binary #()
-           :write-text (fn [_env ^IVectorReader rdr idx]
-                         (let [^IVectorReader list-rdr (.listElementReader rdr)
+           :write-text (fn [_env ^IVectorReader list-rdr idx]
+                         (let [^IVectorReader el-rdr (.listElementReader list-rdr)
                                sb (StringBuilder. "{")]
-                           (log/tracef "write-text_int8 start %d len %d"
-                                      (.getListStartIndex list-rdr idx)
-                                      (.getListCount list-rdr idx))
                            (if (not (zero? (.getListCount list-rdr idx)))
                              (do
                                (loop [lidx (.getListStartIndex list-rdr idx)]
                                  (when (< lidx (+ (.getListCount list-rdr idx)
                                                   (.getListStartIndex list-rdr idx)))
-                                   (.append sb (.getLong list-rdr lidx))
+                                   (.append sb (if (.isNull el-rdr lidx)
+                                                 "null"
+                                                 (.getLong el-rdr lidx)))
                                    (.append sb ",")
                                    (recur (inc lidx))))
                                (.setCharAt sb (dec (.length sb)) \}))
@@ -1286,10 +1275,8 @@
    [:timestamp-tz :micro] :timestamptz
    :tstz-range :tstz-range
    [:interval :month-day-nano] :interval
-   [:list #{:i32}] :_int4
-   #{[:list :i32]} :_int4
-   [:list #{:i64}] :_int8
-   #{[:list :i64]} :_int8
+   [:list :i32] :_int4
+   [:list :i64] :_int8
 
    #_#_; FIXME not supported by pgjdbc until we sort #3683 and #3212
        :transit :transit})
