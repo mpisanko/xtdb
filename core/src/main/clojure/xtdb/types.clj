@@ -301,10 +301,18 @@
 (def num-types (descendants col-type-hierarchy :num))
 (def date-time-types (descendants col-type-hierarchy :date-time))
 
+(defn is-list-type [col-type]
+  (= :list (col-type-head col-type)))
+
 (defn flatten-union-types [col-type]
   (if (= :union (col-type-head col-type))
     (second col-type)
     #{col-type}))
+
+(defn flatten-list-unions [col-type]
+  (if (is-list-type col-type)
+    [:list (flatten-union-types (second col-type))]
+    col-type))
 
 (defn flatten-union-field [^Field field]
   (if (instance? ArrowType$Union (.getType field))
@@ -1284,6 +1292,10 @@
 (defn col-type->pg-type [fallback-pg-type col-type]
   (get col-types->pg-types
        (cond-> col-type
+         ;; ignore lists
+         (is-list-type col-type)
+         (subvec 0 2)
+
          ;; ignore TZ
          (= (col-type-head col-type) :timestamp-tz)
          (subvec 0 2))
@@ -1295,12 +1307,19 @@
     (cond
       (= 1 (count col-types)) (first col-types)
       (set/subset? col-types #{:float4 :float8}) :float8
-      (set/subset? col-types #{:int2 :int4 :int8}) :int8)))
+      (set/subset? col-types #{:int2 :int4 :int8}) :int8
+      (is-list-type col-types) [:list (->unified-col-type (second col-types))])))
 
 (defn remove-nulls
   [typ]
-  (if (= :list (col-type-head typ))
-    [[:list (disj (second typ) :null)]]
+  (if (is-list-type typ)
+    (let [inner (-> typ
+                    second
+                    (disj :null))]
+      ;; wrap in extra vector as next step maps - we want the whole [:list :inner] evaluated
+      [[:list (if (= 1 (count inner))
+                (first inner)
+                inner)]])
     (disj typ :null)))
 
 (defn field->pg-type
@@ -1309,7 +1328,9 @@
   ([fallback-pg-type ^Field field]
    (let [field-name (.getName field)
          col-type (field->col-type field)
-         col-types (-> (flatten-union-types col-type)
+         col-types (-> ((if (is-list-type col-type)
+                          flatten-list-unions
+                          flatten-union-types) col-type)
                        remove-nulls
                        (->> (into #{} (map (partial col-type->pg-type fallback-pg-type)))))]
      (log/tracef "field->pg-type %s, col-type %s, field-name %s" (pr-str col-types) col-type field-name)
@@ -1322,8 +1343,12 @@
                 :column-name field-name)))))
 
 (comment
-
+  (->> [[:list :i32]] (into #{} (map (partial col-type->pg-type nil))))
   (remove-nulls (flatten-union-types [:list [:union #{:i32 :null}]]))
   (remove-nulls (flatten-union-types [:list [:union #{:i32 :i64}]]))
   (remove-nulls (flatten-union-types [:union #{[:list :i64] :null}]))
+  (flatten-union-types [:list [:union #{:int32 :null}]])
+  (remove-nulls (flatten-list-unions [:list [:union #{:int32 :null}]]))
+  (->unified-col-type [:union #{:int4 :int8}])
+  (->unified-col-type [:list #{:int4 :int8}])
   #_1)

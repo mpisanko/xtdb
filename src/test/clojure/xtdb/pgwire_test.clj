@@ -14,9 +14,11 @@
             [xtdb.pgwire :as pgwire]
             [xtdb.serde :as serde]
             [xtdb.test-util :as tu]
+            [xtdb.types :as types]
             [xtdb.util :as util])
   (:import (java.io InputStream)
            (java.lang Thread$State)
+           (java.net Socket)
            (java.sql Array Connection PreparedStatement ResultSet SQLWarning Statement Timestamp Types)
            (java.time Clock Instant LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset)
            java.util.Calendar
