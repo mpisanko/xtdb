@@ -1978,3 +1978,18 @@ ORDER BY t.oid DESC LIMIT 1"
       (with-open [rs (.executeQuery stmt)]
 
         (t/is (= [{"_id" 2, "f" 2.0, "i" 2} {"_id" 1, "f" 1.0, "i" 1}] (rs->maps rs)))))))
+
+(deftest test-primitive-array
+  (t/testing "primitive array"
+    (with-open [conn (jdbc-conn)]
+      (jdbc/execute! conn ["INSERT INTO docs(_id) VALUES (1)"])
+      (jdbc/execute! conn ["INSERT INTO docs(_id) VALUES (2)"])
+
+      (with-open [stmt (.prepareStatement conn "SELECT ARRAY(SELECT _id FROM docs) AS ids")]
+
+        (with-open [rs (.executeQuery stmt)]
+          (t/is (= [{"ids" "_int4"}]
+                   (result-metadata stmt)
+                   (result-metadata rs)))
+
+          #_(t/is (= [{"ids" [1 2]}] (rs->maps rs))))))))

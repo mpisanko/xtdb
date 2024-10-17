@@ -5,7 +5,8 @@
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.serde :as serde]
             [xtdb.time :as time]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [clojure.tools.logging :as log])
   (:import (clojure.lang MapEntry)
            [java.io ByteArrayInputStream Writer]
            [java.nio ByteBuffer]
@@ -301,7 +302,8 @@
 (def date-time-types (descendants col-type-hierarchy :date-time))
 
 (defn flatten-union-types [col-type]
-  ;; FIXME this starts to smell. just trying to get it to work, will need to revisit
+  ;; FIXME this starts to smell (after my addition).
+  ;; just trying to get it to work, will need to revisit
   (cond
     (and
      (= :list (col-type-head col-type))
@@ -1201,61 +1203,69 @@
              :write-binary (fn [_env ^IVectorReader rdr idx]
                              (serde/write-transit (.getObject rdr idx) :json))}
 
-   [:list #{:int32}] {:typname "_int4"
-                      :oid 1007
-                      :typsend "array_send"
-                      :typreceive "array_recv"
-                      :read-text (fn [arr]
-                                   (let [elems (when-not (empty? arr)
-                                                 (let [sa (str/trim arr)]
-                                                   (-> sa
-                                                       (subs 1 (dec (count sa)))
-                                                       (str/split #","))))]
-                                     (mapv #(Integer/parseInt %) elems)))
+   :_int4 {:typname "_int4"
+           :oid 1007
+           :typsend "array_send"
+           :typreceive "array_recv"
+           :read-text (fn [_env arr]
+                        (log/tracef "read-text_int4 %s" arr)
+                        (let [elems (when-not (empty? arr)
+                                      (let [sa (str/trim arr)]
+                                        (-> sa
+                                            (subs 1 (dec (count sa)))
+                                            (str/split #","))))]
+                          (mapv #(Integer/parseInt %) elems)))
                     ;; :read-binary #()
-                      :write-text (fn [^IVectorReader rdr idx]
-                                    (let [list-rdr (.getListElementReader rdr)
-                                          sb (StringBuilder. "{")]
-                                      (if (not (zero? (.getListCount list-rdr idx)))
-                                        (do
-                                          (loop [lidx (.getListStartIndex list-rdr idx)]
-                                            (when (< lidx (+ (.getListCount list-rdr idx)
-                                                             (.getListStartIndex list-rdr idx)))
-                                              (.append sb (.getInt list-rdr lidx))
-                                              (.append sb ",")
-                                              (recur (inc lidx))))
-                                          (.setCharAt sb (dec (.length sb)) \}))
-                                        (.append sb "}"))
-                                      (utf8 (.toString sb))))
-                      #_#_:write-binary #()}
+           :write-text (fn [_env ^IVectorReader list-rdr idx]
+                         (let [^IVectorReader el-rdr (.listElementReader list-rdr)
+                               sb (StringBuilder. "{")]
+                           (log/tracef "write-text_int4 start %d len %d"
+                                      (.getListStartIndex list-rdr idx)
+                                      (.getListCount list-rdr idx))
+                           (if (not (zero? (.getListCount list-rdr idx)))
+                             (do
+                               (loop [lidx (.getListStartIndex list-rdr idx)]
+                                 (when (< lidx (+ (.getListCount list-rdr idx)
+                                                  (.getListStartIndex list-rdr idx)))
+                                   (.append sb (.getInt el-rdr lidx))
+                                   (.append sb ",")
+                                   (recur (inc lidx))))
+                               (.setCharAt sb (dec (.length sb)) \}))
+                             (.append sb "}"))
+                           (utf8 (.toString sb))))
+           #_#_:write-binary #()}
 
-   [:list #{:int64}] {:typname "_int8"
-                      :oid 1016
-                      :typsend "array_send"
-                      :typreceive "array_recv"
-                      :read-text (fn [arr]
-                                   (let [elems (when-not (empty? arr)
-                                                 (let [sa (str/trim arr)]
-                                                   (-> sa
-                                                       (subs 1 (dec (count sa)))
-                                                       (str/split #","))))]
-                                     (mapv #(Long/parseLong %) elems)))
+   :_int8 {:typname "_int8"
+           :oid 1016
+           :typsend "array_send"
+           :typreceive "array_recv"
+           :read-text (fn [_env arr]
+                        (log/tracef "read-text_int8 %s" arr)
+                        (let [elems (when-not (empty? arr)
+                                      (let [sa (str/trim arr)]
+                                        (-> sa
+                                            (subs 1 (dec (count sa)))
+                                            (str/split #","))))]
+                          (mapv #(Long/parseLong %) elems)))
                       ;; :read-binary #()
-                      :write-text (fn [^IVectorReader rdr idx]
-                                    (let [list-rdr (.getListElementReader rdr)
-                                          sb (StringBuilder. "{")]
-                                      (if (not (zero? (.getListCount list-rdr idx)))
-                                        (do
-                                          (loop [lidx (.getListStartIndex list-rdr idx)]
-                                            (when (< lidx (+ (.getListCount list-rdr idx)
-                                                             (.getListStartIndex list-rdr idx)))
-                                              (.append sb (.getLong list-rdr lidx))
-                                              (.append sb ",")
-                                              (recur (inc lidx))))
-                                          (.setCharAt sb (dec (.length sb)) \}))
-                                        (.append sb "}"))
-                                      (utf8 (.toString sb))))
-                      #_#_:write-binary #()}})
+           :write-text (fn [_env ^IVectorReader rdr idx]
+                         (let [^IVectorReader list-rdr (.listElementReader rdr)
+                               sb (StringBuilder. "{")]
+                           (log/tracef "write-text_int8 start %d len %d"
+                                      (.getListStartIndex list-rdr idx)
+                                      (.getListCount list-rdr idx))
+                           (if (not (zero? (.getListCount list-rdr idx)))
+                             (do
+                               (loop [lidx (.getListStartIndex list-rdr idx)]
+                                 (when (< lidx (+ (.getListCount list-rdr idx)
+                                                  (.getListStartIndex list-rdr idx)))
+                                   (.append sb (.getLong list-rdr lidx))
+                                   (.append sb ",")
+                                   (recur (inc lidx))))
+                               (.setCharAt sb (dec (.length sb)) \}))
+                             (.append sb "}"))
+                           (utf8 (.toString sb))))
+           #_#_:write-binary #()}})
 
 (def pg-types-by-oid (into {} (map #(hash-map (:oid (val %)) (val %))) pg-types))
 
@@ -1277,7 +1287,9 @@
    :tstz-range :tstz-range
    [:interval :month-day-nano] :interval
    [:list #{:i32}] :_int4
+   #{[:list :i32]} :_int4
    [:list #{:i64}] :_int8
+   #{[:list :i64]} :_int8
 
    #_#_; FIXME not supported by pgjdbc until we sort #3683 and #3212
        :transit :transit})
@@ -1313,6 +1325,7 @@
          col-types (-> (flatten-union-types col-type)
                        remove-nulls
                        (->> (into #{} (map (partial col-type->pg-type fallback-pg-type)))))]
+     (log/tracef "field->pg-type %s, col-type %s, field-name %s" (pr-str col-types) col-type field-name)
      (-> (if-let [col-type (->unified-col-type col-types)]
            col-type
            (col-type->pg-type fallback-pg-type col-type))
@@ -1323,5 +1336,7 @@
 
 (comment
 
+  (remove-nulls (flatten-union-types [:list [:union #{:i32 :null}]]))
   (remove-nulls (flatten-union-types [:list [:union #{:i32 :i64}]]))
+  (remove-nulls (flatten-union-types [:union #{[:list :i64] :null}]))
   #_1)
